@@ -1,0 +1,9 @@
+# Normalise line endings: LF in the repository, native in the working tree.
+* text=auto eol=lf
+
+# Binary assets, never normalised.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

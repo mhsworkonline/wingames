@@ -1,0 +1,351 @@
+:root {
+  --felt-1: #146c43;
+  --felt-2: #0b4b2e;
+  --bar: #10261c;
+  --bar-2: #173526;
+  --text: #eaf3ee;
+  --muted: #9fbdae;
+  --accent: #f0b429;
+  --card-radius: 7px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--felt-2);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- chrome */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 16px;
+  background: var(--bar);
+  border-bottom: 1px solid #000;
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.tab {
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: #ffffff14;
+}
+
+.tab.active {
+  background: var(--felt-1);
+  border-color: #ffffff2e;
+  color: #fff;
+  font-weight: 600;
+}
+
+.stats {
+  display: flex;
+  gap: 18px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 52px;
+}
+
+.stat .label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.stat .value {
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--bar-2);
+  border-bottom: 1px solid #0006;
+}
+
+.options {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+}
+
+.option {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.option select {
+  background: #0d1f17;
+  color: var(--text);
+  border: 1px solid #ffffff26;
+  border-radius: 5px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #ffffff2e;
+  background: #ffffff14;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: #ffffff26;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: #00000033;
+  color: #241a02;
+  font-weight: 600;
+}
+
+.btn.primary:hover {
+  background: #ffc63d;
+}
+
+/* ---------------------------------------------------------------- board */
+
+.board-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at 50% 0%, #1c8a55 0%, var(--felt-1) 45%, var(--felt-2) 100%);
+}
+
+.board {
+  position: relative;
+  margin: 0 auto;
+}
+
+.pile {
+  position: absolute;
+}
+
+.slot {
+  position: absolute;
+  inset: 0;
+  width: var(--card-w);
+  height: var(--card-h);
+  border: 2px dashed #ffffff33;
+  border-radius: var(--card-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--card-w) * 0.32);
+  color: #ffffff2b;
+}
+
+.pile.droppable > .slot {
+  border-color: #ffffff66;
+}
+
+.pile.drop-hover > .slot,
+.pile.drop-hover > .card:last-child {
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+.card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--card-w);
+  height: var(--card-h);
+  border-radius: var(--card-radius);
+  background: #fdfdfa;
+  border: 1px solid #00000033;
+  box-shadow: 0 1px 2px #00000059;
+  color: #111;
+  font-weight: 700;
+  line-height: 1;
+  touch-action: none;
+  will-change: transform;
+}
+
+.card.red {
+  color: #c02626;
+}
+
+.card.back {
+  background:
+    repeating-linear-gradient(45deg, #1e4f8f 0 6px, #1a4680 6px 12px);
+  border: 2px solid #f2f2f2;
+}
+
+/*
+ * Rank and suit sit side by side rather than stacked: in a compressed pile only
+ * the top sliver of a card shows, and a stacked suit glyph would be clipped out.
+ */
+.card .corner {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--card-w) * 0.03);
+  font-size: calc(var(--card-w) * 0.22);
+  line-height: 1;
+  /* Always above the court art, which otherwise covers the index. */
+  z-index: 1;
+}
+
+.card .corner b {
+  font-size: calc(var(--card-w) * 0.19);
+}
+
+.card .corner.tl {
+  top: 4%;
+  left: 6%;
+}
+
+.card .corner.br {
+  bottom: 4%;
+  right: 6%;
+  transform: rotate(180deg);
+}
+
+.card .face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--card-w) * 0.46);
+  opacity: 0.9;
+}
+
+/* Court figures fill the card; the corners sit on top of the art panel. */
+.card .court-face {
+  opacity: 1;
+}
+
+.card .court {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Clicks and drags belong to the card, never to a path inside the artwork. */
+  pointer-events: none;
+}
+
+.drag-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 500;
+}
+
+.drag-layer .card {
+  box-shadow: 0 6px 14px #00000073;
+}
+
+.drag-layer.active .card {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------- overlay */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #000000a6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.dialog {
+  background: var(--bar-2);
+  border: 1px solid #ffffff2e;
+  border-radius: 12px;
+  padding: 28px 36px;
+  text-align: center;
+  box-shadow: 0 20px 60px #000000a6;
+}
+
+.dialog h2 {
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.dialog p {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+.hidden {
+  display: none;
+}
