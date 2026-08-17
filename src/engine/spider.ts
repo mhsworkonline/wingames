@@ -1,4 +1,13 @@
 import { buildDeck, cloneState, findPile, pile, rng, shuffle, topCard, transfer } from './cards';
+import {
+  clampLevel,
+  describeBias,
+  countOpeningMoves,
+  levelOption,
+  pickDeal,
+  type DealBias,
+  type Level,
+} from './difficulty';
 import type { Card, Game, GameState, Move, Pile, Suit } from './types';
 
 const TABLEAU_COUNT = 10;
@@ -22,6 +31,73 @@ function suitsFor(count: number): Suit[] {
   if (count === 1) return ['S'];
   if (count === 2) return ['S', 'H'];
   return ['S', 'H', 'D', 'C'];
+}
+
+/**
+ * Suit count dominates Spider's difficulty — one suit is a gentle game, four
+ * is a hard one — so the levels walk 1, 1, 2, 4, 4 and bias the deal at the
+ * two ends to separate the levels that share a suit count.
+ */
+const SPIDER_LEVELS: Record<Level, { suits: number; pool: number; bias: DealBias }> = {
+  1: { suits: 1, pool: 24, bias: 'easy' },
+  2: { suits: 1, pool: 1, bias: 'none' },
+  3: { suits: 2, pool: 1, bias: 'none' },
+  4: { suits: 4, pool: 1, bias: 'none' },
+  5: { suits: 4, pool: 24, bias: 'hard' },
+};
+
+/** One plain deal, with no difficulty selection applied. */
+function dealSpider(seed: number, suits: number): GameState {
+  const deck = shuffle(buildDeck(2, suitsFor(suits)), rng(seed));
+
+  const piles: Pile[] = [pile('stock', 'stock', 0, 0)];
+  for (let i = 0; i < FOUNDATION_COUNT; i++) {
+    piles.push(pile(`f${i}`, 'foundation', 2 + i, 0));
+  }
+  for (let i = 0; i < TABLEAU_COUNT; i++) {
+    piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
+  }
+
+  const byId = new Map(piles.map((p) => [p.id, p]));
+  // 54 cards down: six each to the first four columns, five to the rest.
+  for (let col = 0; col < TABLEAU_COUNT; col++) {
+    const size = col < 4 ? 6 : 5;
+    for (let n = 0; n < size; n++) {
+      const card = deck.pop()!;
+      card.faceUp = n === size - 1;
+      byId.get(`t${col}`)!.cards.push(card);
+    }
+  }
+  byId.get('stock')!.cards.push(...deck);
+
+  return {
+    game: 'spider',
+    seed,
+    options: { suits },
+    piles,
+    moves: 0,
+    score: 500,
+    won: false,
+  };
+}
+
+/**
+ * Higher means friendlier. Opening moves matter most, and a face-up card that
+ * already sits on the next rank up in its own suit is a run waiting to happen.
+ */
+function ease(state: GameState): number {
+  let sameSuitPairs = 0;
+  for (const p of state.piles) {
+    if (p.kind !== 'tableau') continue;
+    for (let i = 1; i < p.cards.length; i++) {
+      const above = p.cards[i - 1];
+      const below = p.cards[i];
+      if (above.faceUp && below.faceUp && above.suit === below.suit && above.rank === below.rank + 1) {
+        sameSuitPairs += 1;
+      }
+    }
+  }
+  return countOpeningMoves(spider, state) + sameSuitPairs * 6;
 }
 
 /** Turns the top card face up when a move leaves a face-down card exposed. */
@@ -49,55 +125,23 @@ function collectCompleted(state: GameState): number {
 export const spider: Game = {
   id: 'spider',
   name: 'Spider',
-  cols: 10,
   heightUnits: 4.1,
   hasScore: true,
-  options: [
-    {
-      key: 'suits',
-      label: 'Suits',
-      values: [
-        { value: 1, label: '1 Suit' },
-        { value: 2, label: '2 Suits' },
-        { value: 4, label: '4 Suits' },
-      ],
-      default: 1,
-    },
-  ],
+  options: [levelOption()],
 
   create(seed, options = {}) {
-    const suits = [1, 2, 4].includes(options.suits) ? options.suits : 1;
-    const deck = shuffle(buildDeck(2, suitsFor(suits)), rng(seed));
+    const level = clampLevel(options.level);
+    const { suits: levelSuits, pool, bias } = SPIDER_LEVELS[level];
+    // An explicit suit count still wins, so a caller can pin the variant.
+    const suits = [1, 2, 4].includes(options.suits) ? options.suits : levelSuits;
+    const state = pickDeal(seed, pool, bias, (s) => dealSpider(s, suits), (s) => ease(s));
+    state.options = { level, suits };
+    return state;
+  },
 
-    const piles: Pile[] = [pile('stock', 'stock', 0, 0)];
-    for (let i = 0; i < FOUNDATION_COUNT; i++) {
-      piles.push(pile(`f${i}`, 'foundation', 2 + i, 0));
-    }
-    for (let i = 0; i < TABLEAU_COUNT; i++) {
-      piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
-    }
-
-    const byId = new Map(piles.map((p) => [p.id, p]));
-    // 54 cards down: six each to the first four columns, five to the rest.
-    for (let col = 0; col < TABLEAU_COUNT; col++) {
-      const size = col < 4 ? 6 : 5;
-      for (let n = 0; n < size; n++) {
-        const card = deck.pop()!;
-        card.faceUp = n === size - 1;
-        byId.get(`t${col}`)!.cards.push(card);
-      }
-    }
-    byId.get('stock')!.cards.push(...deck);
-
-    return {
-      game: 'spider',
-      seed,
-      options: { suits },
-      piles,
-      moves: 0,
-      score: 500,
-      won: false,
-    };
+  describeLevel(level) {
+    const { suits, pool, bias } = SPIDER_LEVELS[clampLevel(level)];
+    return `${suits} suit${suits === 1 ? '' : 's'} · ${describeBias(bias, pool)}`;
   },
 
   grabCount(state, pileId, cardIndex) {

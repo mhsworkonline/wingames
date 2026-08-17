@@ -2,7 +2,7 @@ import { defaultOptions, getGame, GAMES } from '../engine';
 import { findPile } from '../engine/cards';
 import type { Card, Game, GameId, GameState, Move } from '../engine/types';
 import { formatTime, getRecord, submitWin, variantKey, type Improvements } from './records';
-import { cardElement, computeMetrics, type Metrics, renderBoard } from './render';
+import { boardColumns, cardElement, computeMetrics, type Metrics, renderBoard } from './render';
 import { Sound } from './sound';
 
 interface Session {
@@ -179,12 +179,25 @@ export class App {
         select.appendChild(o);
       }
       select.addEventListener('change', () => {
-        this.current.options = { ...this.current.options, [opt.key]: Number(select.value) };
+        const value = Number(select.value);
+        // Choosing a difficulty clears any pinned variant setting, so the level
+        // alone decides draw count, suit count or cell count.
+        this.current.options =
+          opt.key === 'level' ? { level: value } : { ...this.current.options, [opt.key]: value };
         this.newGame();
+        // A level can change the board width (FreeCell's cell count), so rebuild
+        // the option bar and re-measure rather than only redrawing.
+        this.buildOptionBar();
       });
       wrap.appendChild(select);
       this.optionBar.appendChild(wrap);
     }
+
+    const hint = document.createElement('span');
+    hint.className = 'option-hint';
+    hint.id = 'level-hint';
+    hint.textContent = this.current.game.describeLevel(this.current.options.level ?? 3);
+    this.optionBar.appendChild(hint);
   }
 
   // ---------------------------------------------------------------- sessions
@@ -224,6 +237,7 @@ export class App {
     this.current = this.freshSession(game, seed, options);
     this.sessions.set(game.id, this.current);
     this.hideOverlay();
+    // layout() re-measures, which matters when a level changes the column count.
     this.layout();
   }
 
@@ -538,7 +552,8 @@ export class App {
 
   private layout(): void {
     const box = this.contentBox();
-    this.metrics = computeMetrics(this.current.game, box.width, box.height);
+    const cols = boardColumns(this.current.state);
+    this.metrics = computeMetrics(this.current.game, cols, box.width, box.height);
     this.render();
   }
 

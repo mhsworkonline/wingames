@@ -41,8 +41,13 @@ const MAX_CARD_W = 200;
  * typical fanned column; deeper piles than that compress via `fanOffsets`
  * rather than shrinking every card on the board.
  */
-export function computeMetrics(game: Game, viewportW: number, viewportH: number): Metrics {
-  const byWidth = (viewportW * WIDTH_USE) / (game.cols + (game.cols - 1) * GAP_RATIO);
+export function computeMetrics(
+  game: Game,
+  cols: number,
+  viewportW: number,
+  viewportH: number,
+): Metrics {
+  const byWidth = (viewportW * WIDTH_USE) / (cols + (cols - 1) * GAP_RATIO);
   const byHeight = (viewportH - 16) / (game.heightUnits * CARD_ASPECT);
   const cardW = Math.round(
     Math.max(MIN_CARD_W, Math.min(MAX_CARD_W, Math.min(byWidth, byHeight))),
@@ -150,6 +155,11 @@ export interface RenderOptions {
   maxPileHeight: number;
 }
 
+/** How many card columns the current layout spans, taken from the piles themselves. */
+export function boardColumns(state: GameState): number {
+  return state.piles.reduce((widest, p) => Math.max(widest, p.x + 1), 1);
+}
+
 export function renderBoard(
   board: HTMLElement,
   game: Game,
@@ -197,6 +207,6 @@ export function renderBoard(
     boardHeight = Math.max(boardHeight, top + m.cardH + last.dy);
   }
 
-  board.style.width = `${game.cols * (m.cardW + m.gapX) - m.gapX}px`;
+  board.style.width = `${boardColumns(state) * (m.cardW + m.gapX) - m.gapX}px`;
   board.style.height = `${boardHeight}px`;
 }

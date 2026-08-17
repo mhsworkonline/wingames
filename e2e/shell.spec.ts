@@ -61,27 +61,33 @@ test.describe('application shell', () => {
     expect((await readState(page)).moves).toBe(1);
   });
 
-  test('shows game-specific options and hides score where it does not apply', async ({ page }) => {
+  test('offers a difficulty level for every game and hides score where it does not apply', async ({ page }) => {
     await openGame(page, 'klondike', 3);
-    await expect(page.locator('select[data-option="draw"]')).toBeVisible();
+    await expect(page.locator('select[data-option="level"]')).toBeVisible();
+    await expect(page.locator('select[data-option="level"] option')).toHaveCount(5);
+    await expect(page.locator('#level-hint')).toContainText('Draw 1');
     await expect(page.locator('#stat-score-box')).toBeVisible();
 
     await page.getByRole('button', { name: 'Spider', exact: true }).click();
-    await expect(page.locator('select[data-option="suits"]')).toBeVisible();
+    await expect(page.locator('select[data-option="level"]')).toBeVisible();
+    await expect(page.locator('#level-hint')).toContainText('suits');
 
     await page.getByRole('button', { name: 'FreeCell', exact: true }).click();
-    await expect(page.locator('.options select')).toHaveCount(0);
+    await expect(page.locator('select[data-option="level"]')).toBeVisible();
+    await expect(page.locator('#level-hint')).toContainText('free cells');
     await expect(page.locator('#stat-score-box')).toBeHidden();
   });
 
-  test('changing the draw option starts a fresh deal', async ({ page }) => {
+  test('raising the difficulty starts a fresh deal with harder settings', async ({ page }) => {
     await openGame(page, 'klondike', 11);
     await clickStock(page);
     expect((await readState(page)).options.draw).toBe(1);
     expect(await page.locator('.pile[data-pile="waste"] .card').count()).toBe(1);
 
-    await page.locator('select[data-option="draw"]').selectOption('3');
+    // Level 4 switches Klondike to draw-3.
+    await page.locator('select[data-option="level"]').selectOption('4');
     const state = await readState(page);
+    expect(state.options.level).toBe(4);
     expect(state.options.draw).toBe(3);
     expect(state.moves).toBe(0);
 

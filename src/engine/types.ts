@@ -68,8 +68,6 @@ export interface GameOption {
 export interface Game {
   id: GameId;
   name: string;
-  /** Board width in card columns. */
-  cols: number;
   /**
    * Vertical budget in card heights: the top row plus a typical fanned column.
    * Used to size cards; longer piles compress their fan instead.
@@ -79,6 +77,9 @@ export interface Game {
   hasScore: boolean;
 
   create(seed: number, options?: Record<string, number>): GameState;
+
+  /** Short summary of what a difficulty level changes, shown in the toolbar. */
+  describeLevel(level: number): string;
 
   /**
    * How many cards can be picked up starting at `cardIndex` of `pileId`,

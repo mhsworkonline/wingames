@@ -1,8 +1,73 @@
 import { buildDeck, cloneState, color, findPile, pile, rng, shuffle, topCard, transfer } from './cards';
+import {
+  clampLevel,
+  describeBias,
+  countOpeningMoves,
+  lowCardAccess,
+  levelOption,
+  pickDeal,
+  type DealBias,
+  type Level,
+} from './difficulty';
 import type { Card, Game, GameState, Pile } from './types';
 
 const TABLEAU_COUNT = 7;
 const FOUNDATION_COUNT = 4;
+
+/**
+ * Draw-1 is the gentler game and draw-3 the harder one, so the levels step
+ * through the draw count and lean on deal bias to separate the pairs that
+ * share it.
+ */
+const KLONDIKE_LEVELS: Record<Level, { draw: number; pool: number; bias: DealBias }> = {
+  1: { draw: 1, pool: 32, bias: 'easy' },
+  2: { draw: 1, pool: 8, bias: 'easy' },
+  3: { draw: 1, pool: 1, bias: 'none' },
+  4: { draw: 3, pool: 8, bias: 'hard' },
+  5: { draw: 3, pool: 32, bias: 'hard' },
+};
+
+/** One plain deal, with no difficulty selection applied. */
+function dealKlondike(seed: number, draw: number): GameState {
+  const deck = shuffle(buildDeck(1), rng(seed));
+
+  const piles: Pile[] = [
+    pile('stock', 'stock', 0, 0),
+    pile('waste', 'waste', 1, 0, 'right', 3),
+  ];
+  for (let i = 0; i < FOUNDATION_COUNT; i++) {
+    piles.push(pile(`f${i}`, 'foundation', 3 + i, 0));
+  }
+  for (let i = 0; i < TABLEAU_COUNT; i++) {
+    piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
+  }
+
+  const byId = new Map(piles.map((p) => [p.id, p]));
+  // Classic deal: column i gets i+1 cards, only the last of which is face up.
+  for (let col = 0; col < TABLEAU_COUNT; col++) {
+    for (let n = 0; n <= col; n++) {
+      const card = deck.pop()!;
+      card.faceUp = n === col;
+      byId.get(`t${col}`)!.cards.push(card);
+    }
+  }
+  byId.get('stock')!.cards.push(...deck);
+
+  return {
+    game: 'klondike',
+    seed,
+    options: { draw },
+    piles,
+    moves: 0,
+    score: 0,
+    won: false,
+  };
+}
+
+/** Higher means friendlier: accessible aces and plenty of opening moves. */
+function ease(state: GameState): number {
+  return lowCardAccess(state) * 4 + countOpeningMoves(klondike, state);
+}
 
 export const KLONDIKE_TABLEAUS = Array.from({ length: TABLEAU_COUNT }, (_, i) => `t${i}`);
 export const KLONDIKE_FOUNDATIONS = Array.from({ length: FOUNDATION_COUNT }, (_, i) => `f${i}`);
@@ -50,56 +115,23 @@ function scoreFor(from: Pile, to: Pile): number {
 export const klondike: Game = {
   id: 'klondike',
   name: 'Klondike',
-  cols: 7,
   heightUnits: 3.8,
   hasScore: true,
-  options: [
-    {
-      key: 'draw',
-      label: 'Draw',
-      values: [
-        { value: 1, label: 'Draw 1' },
-        { value: 3, label: 'Draw 3' },
-      ],
-      default: 1,
-    },
-  ],
+  options: [levelOption()],
 
   create(seed, options = {}) {
-    const draw = options.draw === 3 ? 3 : 1;
-    const deck = shuffle(buildDeck(1), rng(seed));
+    const level = clampLevel(options.level);
+    const { draw: levelDraw, pool, bias } = KLONDIKE_LEVELS[level];
+    // An explicit draw count still wins, so a caller can pin the variant.
+    const draw = options.draw === 3 ? 3 : options.draw === 1 ? 1 : levelDraw;
+    const state = pickDeal(seed, pool, bias, (s) => dealKlondike(s, draw), (s) => ease(s));
+    state.options = { level, draw };
+    return state;
+  },
 
-    const piles: Pile[] = [
-      pile('stock', 'stock', 0, 0),
-      pile('waste', 'waste', 1, 0, 'right', 3),
-    ];
-    for (let i = 0; i < FOUNDATION_COUNT; i++) {
-      piles.push(pile(`f${i}`, 'foundation', 3 + i, 0));
-    }
-    for (let i = 0; i < TABLEAU_COUNT; i++) {
-      piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
-    }
-
-    const byId = new Map(piles.map((p) => [p.id, p]));
-    // Classic deal: column i gets i+1 cards, only the last of which is face up.
-    for (let col = 0; col < TABLEAU_COUNT; col++) {
-      for (let n = 0; n <= col; n++) {
-        const card = deck.pop()!;
-        card.faceUp = n === col;
-        byId.get(`t${col}`)!.cards.push(card);
-      }
-    }
-    byId.get('stock')!.cards.push(...deck);
-
-    return {
-      game: 'klondike',
-      seed,
-      options: { draw },
-      piles,
-      moves: 0,
-      score: 0,
-      won: false,
-    };
+  describeLevel(level) {
+    const { draw, pool, bias } = KLONDIKE_LEVELS[clampLevel(level)];
+    return `Draw ${draw} · ${describeBias(bias, pool)}`;
   },
 
   grabCount(state, pileId, cardIndex) {

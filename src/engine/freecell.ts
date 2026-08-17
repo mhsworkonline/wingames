@@ -1,9 +1,71 @@
 import { buildDeck, cloneState, color, findPile, pile, rng, shuffle, topCard, transfer } from './cards';
+import {
+  clampLevel,
+  describeBias,
+  countOpeningMoves,
+  lowCardAccess,
+  levelOption,
+  pickDeal,
+  type DealBias,
+  type Level,
+} from './difficulty';
 import type { Card, Game, GameState, Pile } from './types';
 
 const TABLEAU_COUNT = 8;
 const CELL_COUNT = 4;
 const FOUNDATION_COUNT = 4;
+
+/**
+ * Free cells are FreeCell's difficulty dial: every spare cell is another card
+ * you can park, and it doubles the length of run you can carry. Six cells is
+ * close to a puzzle you cannot lose; two is genuinely punishing.
+ */
+const FREECELL_LEVELS: Record<Level, { cells: number; pool: number; bias: DealBias }> = {
+  1: { cells: 6, pool: 16, bias: 'easy' },
+  2: { cells: 5, pool: 1, bias: 'none' },
+  3: { cells: CELL_COUNT, pool: 1, bias: 'none' },
+  4: { cells: 3, pool: 1, bias: 'none' },
+  5: { cells: 2, pool: 16, bias: 'hard' },
+};
+
+/** One plain deal, with no difficulty selection applied. */
+function dealFreecell(seed: number, cells: number): GameState {
+  const deck = shuffle(buildDeck(1), rng(seed));
+
+  const piles: Pile[] = [];
+  for (let i = 0; i < cells; i++) piles.push(pile(`c${i}`, 'cell', i, 0));
+  // Foundations sit to the right of however many cells the level grants.
+  for (let i = 0; i < FOUNDATION_COUNT; i++) {
+    piles.push(pile(`f${i}`, 'foundation', Math.max(cells, TABLEAU_COUNT - FOUNDATION_COUNT) + i, 0));
+  }
+  for (let i = 0; i < TABLEAU_COUNT; i++) piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
+
+  const byId = new Map(piles.map((p) => [p.id, p]));
+  // Everything is dealt face up: 7 cards to the first four columns, 6 to the rest.
+  for (let col = 0; col < TABLEAU_COUNT; col++) {
+    const size = col < 4 ? 7 : 6;
+    for (let n = 0; n < size; n++) {
+      const card = deck.pop()!;
+      card.faceUp = true;
+      byId.get(`t${col}`)!.cards.push(card);
+    }
+  }
+
+  return {
+    game: 'freecell',
+    seed,
+    options: { cells },
+    piles,
+    moves: 0,
+    score: 0,
+    won: false,
+  };
+}
+
+/** Higher means friendlier: reachable aces and plenty of opening moves. */
+function ease(state: GameState): number {
+  return lowCardAccess(state) * 4 + countOpeningMoves(freecell, state);
+}
 
 export const FREECELL_TABLEAUS = Array.from({ length: TABLEAU_COUNT }, (_, i) => `t${i}`);
 export const FREECELL_CELLS = Array.from({ length: CELL_COUNT }, (_, i) => `c${i}`);
@@ -42,39 +104,23 @@ function canDropOnFoundation(target: Pile, moving: Card[]): boolean {
 export const freecell: Game = {
   id: 'freecell',
   name: 'FreeCell',
-  cols: 8,
   heightUnits: 3.9,
   hasScore: false,
-  options: [],
+  options: [levelOption()],
 
-  create(seed) {
-    const deck = shuffle(buildDeck(1), rng(seed));
+  create(seed, options = {}) {
+    const level = clampLevel(options.level);
+    const { cells: levelCells, pool, bias } = FREECELL_LEVELS[level];
+    // An explicit cell count still wins, so a caller can pin the variant.
+    const cells = options.cells >= 1 && options.cells <= 8 ? options.cells : levelCells;
+    const state = pickDeal(seed, pool, bias, (s) => dealFreecell(s, cells), (s) => ease(s));
+    state.options = { level, cells };
+    return state;
+  },
 
-    const piles: Pile[] = [];
-    for (let i = 0; i < CELL_COUNT; i++) piles.push(pile(`c${i}`, 'cell', i, 0));
-    for (let i = 0; i < FOUNDATION_COUNT; i++) piles.push(pile(`f${i}`, 'foundation', 4 + i, 0));
-    for (let i = 0; i < TABLEAU_COUNT; i++) piles.push(pile(`t${i}`, 'tableau', i, 1, 'down'));
-
-    const byId = new Map(piles.map((p) => [p.id, p]));
-    // Everything is dealt face up: 7 cards to the first four columns, 6 to the rest.
-    for (let col = 0; col < TABLEAU_COUNT; col++) {
-      const size = col < 4 ? 7 : 6;
-      for (let n = 0; n < size; n++) {
-        const card = deck.pop()!;
-        card.faceUp = true;
-        byId.get(`t${col}`)!.cards.push(card);
-      }
-    }
-
-    return {
-      game: 'freecell',
-      seed,
-      options: {},
-      piles,
-      moves: 0,
-      score: 0,
-      won: false,
-    };
+  describeLevel(level) {
+    const { cells, pool, bias } = FREECELL_LEVELS[clampLevel(level)];
+    return `${cells} free cells · ${describeBias(bias, pool)}`;
   },
 
   grabCount(state, pileId, cardIndex) {

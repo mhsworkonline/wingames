@@ -22,6 +22,7 @@ src/
     klondike.ts    Klondike rules
     spider.ts      Spider rules
     freecell.ts    FreeCell rules
+    difficulty.ts  Levels 1-5: shared deal selection and ease heuristics
     index.ts       Game registry (GAMES, getGame, defaultOptions)
     testing.ts     Test-only fixture helpers (card/cards shorthand, board builders)
   ui/
@@ -44,6 +45,8 @@ e2e/               Playwright specs + helpers
 - **`canMove` is the single source of truth for legality.** The UI never re-implements a rule; drag, click-to-move, and autoplay all funnel through it.
 - **`apply()` assumes the move is legal.** Callers check `canMove` first.
 - **Determinism.** Deals come from `rng(seed)` (mulberry32), so a seed always reproduces a board. Restart Deal replays the same seed.
+- **Difficulty** is one option per game, levels 1-5. Each level maps to that game's real lever — Klondike's draw count, Spider's suit count, FreeCell's free-cell count — and levels sharing a lever are separated by deal bias: `pickDeal` generates candidates from offsets of the seed, scores each with an ease heuristic, and keeps the friendliest or nastiest. Level 3 uses a pool of one, so Standard is always the unbiased game. Selection stays deterministic, so Restart Deal still replays exactly.
+- Board width is not declared by a game; `boardColumns(state)` derives it from the piles, which is what lets FreeCell's cell count vary per level.
 - **Card ids are unique per game**, including two-deck Spider (`S13#01` = King of Spades, deck 0, suit slot 1).
 
 ### UI conventions

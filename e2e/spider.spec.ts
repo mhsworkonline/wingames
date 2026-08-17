@@ -27,9 +27,9 @@ test.describe('spider gameplay', () => {
     expect(pileCount(await readState(page), 'stock')).toBe(50);
   });
 
-  test('honours the suit-count option', async ({ page }) => {
+  test('difficulty level sets the suit count', async ({ page }) => {
     await openGame(page, 'spider', 2024, { suits: 1 });
-    await page.locator('select[data-option="suits"]').selectOption('4');
+    await page.locator('select[data-option="level"]').selectOption('4');
     const state = await readState(page);
     expect(state.options.suits).toBe(4);
     const suits = new Set(state.piles.flatMap((p) => p.cards.map((c) => c.suit)));
