@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node start.js",
+    "deploy": "node deploy.js",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
