@@ -1,6 +1,7 @@
 import { RANK_LABEL, SUIT_SYMBOL, color } from '../engine/cards';
 import type { Card, Game, GameState, Pile } from '../engine/types';
 import { courtArt, isCourt } from './court';
+import { pipArt } from './pips';
 
 export interface Metrics {
   cardW: number;
@@ -129,7 +130,7 @@ export function cardElement(card: Card): HTMLElement {
   const symbol = SUIT_SYMBOL[card.suit];
   const face = isCourt(card.rank)
     ? `<span class="face court-face">${courtArt(card.rank, card.suit)}</span>`
-    : `<span class="face">${symbol}</span>`;
+    : `<span class="face pip-face">${pipArt(card.rank, card.suit)}</span>`;
   el.innerHTML =
     `<span class="corner tl">${label}<b>${symbol}</b></span>` +
     face +

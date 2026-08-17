@@ -162,6 +162,16 @@ body {
   cursor: default;
 }
 
+.btn.icon {
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.btn.icon.muted {
+  opacity: 0.55;
+}
+
 .btn.primary {
   background: var(--accent);
   border-color: #00000033;
@@ -283,8 +293,20 @@ body {
 }
 
 /* Court figures fill the card; the corners sit on top of the art panel. */
-.card .court-face {
+.card .court-face,
+.card .pip-face {
   opacity: 1;
+}
+
+.card .pips {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.card .pips .pip {
+  fill: currentColor;
 }
 
 .card .court {
@@ -342,8 +364,56 @@ body {
 }
 
 .dialog p {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   color: var(--muted);
+}
+
+.records {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #0000004d;
+  min-width: 260px;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.record-label {
+  flex: 1;
+  text-align: left;
+  color: var(--muted);
+}
+
+.record-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.record-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #241a02;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* A gliding card rides above the rest of the board until it lands. */
+.card.gliding {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none !important;
+  }
 }
 
 .hidden {

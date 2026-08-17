@@ -27,6 +27,9 @@ src/
   ui/
     render.ts      Board layout maths and DOM construction
     court.ts       Inline-SVG court figures for J/Q/K
+    pips.ts        Inline-SVG pip layouts for A-10
+    sound.ts       Web Audio effects, synthesised; mute persisted
+    records.ts     Personal bests per game variant, in localStorage
     app.ts         Controller: sessions, pointer input, undo, timer, stats, test hooks
   main.ts          Entry point; publishes window.wingames for the Playwright suite
   styles.css
@@ -50,7 +53,10 @@ e2e/               Playwright specs + helpers
 - Drop targets are chosen by greatest rectangle overlap among *legal* piles, not by which element is under the cursor. This is forgiving and matches how players actually aim.
 - Each game keeps its own session (state, history, timer) in memory, so switching tabs does not lose a game in progress.
 - Card sizing lives entirely in `computeMetrics`: cards scale to fill the board, bounded by `game.heightUnits` (the top row plus a typical fanned column). Piles deeper than that budget compress their fan — face-down cards first, since they carry no information — down to a readability floor, and only then overflow into a scroll.
-- Court figures (`court.ts`) are drawn once per rank and repeated rotated 180°, the traditional construction. They are pure vector, so they stay crisp at any card size, and `pointer-events: none` keeps clicks on the card rather than on a path inside the art.
+- Court figures (`court.ts`) are drawn once per rank and repeated rotated 180°, the traditional construction. Number cards (`pips.ts`) use the standard French pip arrangement, pips below the midline rotated. Both are pure vector, so they stay crisp at any card size, and `pointer-events: none` keeps clicks on the card rather than on a path inside the art.
+- Card movement uses FLIP: `tryMove` captures every card's screen rect, applies the move, re-renders, then offsets the cards that moved back to where they were and releases them. Because the capture includes drag-layer clones, a dropped card glides from the pointer rather than from its old pile. `prefers-reduced-motion` skips it entirely.
+- Sounds are synthesised in `sound.ts` — no audio files. The AudioContext is created on the first sound, since browsers refuse audio outside a user gesture.
+- Anything that reads card positions after a move must wait for `window.wingames.animating()` to go false, or it will sample a card mid-glide.
 
 ---
 
@@ -58,8 +64,8 @@ e2e/               Playwright specs + helpers
 
 | Command | Purpose |
 | --- | --- |
-| `node start.js` / `npm start` | Start the game and open it in the browser (the manual entry point) |
-| `npm run dev` | Dev server at http://localhost:5173 |
+| `node start.js` / `npm start` | Start the game and open it in the browser (the manual entry point). Uses port 3000, sliding to the next free port if taken |
+| `npm run dev` | Dev server on a fixed http://localhost:5173 (what the Playwright suite drives) |
 | `npm run build` | Typecheck, then production build to `dist/` |
 | `npm run preview` | Serve the production build (port 4173) |
 | `npm run typecheck` | `tsc --noEmit` |

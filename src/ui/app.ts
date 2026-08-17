@@ -1,7 +1,9 @@
 import { defaultOptions, getGame, GAMES } from '../engine';
 import { findPile } from '../engine/cards';
 import type { Card, Game, GameId, GameState, Move } from '../engine/types';
+import { formatTime, getRecord, submitWin, variantKey, type Improvements } from './records';
 import { cardElement, computeMetrics, type Metrics, renderBoard } from './render';
+import { Sound } from './sound';
 
 interface Session {
   game: Game;
@@ -33,17 +35,26 @@ const DRAG_THRESHOLD = 5;
  * other pile stay live, which keeps rapid click-to-move play responsive.
  */
 const CLICK_GUARD_MS = 200;
+/** How long a card takes to glide to its new home. */
+const GLIDE_MS = 190;
 
 export class App {
   private root: HTMLElement;
   private board!: HTMLElement;
   private boardWrap!: HTMLElement;
   private overlay!: HTMLElement;
-  private stats!: { time: HTMLElement; moves: HTMLElement; score: HTMLElement; scoreBox: HTMLElement };
+  private stats!: {
+    time: HTMLElement;
+    moves: HTMLElement;
+    score: HTMLElement;
+    scoreBox: HTMLElement;
+    best: HTMLElement;
+  };
   private optionBar!: HTMLElement;
   private tabs = new Map<GameId, HTMLButtonElement>();
   private undoBtn!: HTMLButtonElement;
   private autoBtn!: HTMLButtonElement;
+  private muteBtn!: HTMLButtonElement;
 
   private sessions = new Map<GameId, Session>();
   private current!: Session;
@@ -52,6 +63,9 @@ export class App {
   private lastMoveAt = 0;
   private lastMoveFrom: string | null = null;
   private autoplaying = false;
+  private sound = new Sound();
+  /** Cards still gliding; the test hooks wait on this reaching zero. */
+  private inFlight = 0;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -73,11 +87,13 @@ export class App {
           <div class="stat"><span class="label">Time</span><span class="value" id="stat-time">0:00</span></div>
           <div class="stat"><span class="label">Moves</span><span class="value" id="stat-moves">0</span></div>
           <div class="stat" id="stat-score-box"><span class="label">Score</span><span class="value" id="stat-score">0</span></div>
+          <div class="stat"><span class="label">Best</span><span class="value" id="stat-best">—</span></div>
         </div>
       </header>
       <div class="toolbar">
         <div class="options" id="options"></div>
         <div class="actions">
+          <button class="btn icon" id="btn-mute" type="button" title="Sound on/off"></button>
           <button class="btn" id="btn-undo" type="button">Undo</button>
           <button class="btn" id="btn-auto" type="button">Autoplay</button>
           <button class="btn" id="btn-restart" type="button">Restart Deal</button>
@@ -91,6 +107,7 @@ export class App {
         <div class="dialog">
           <h2>You win!</h2>
           <p id="win-summary"></p>
+          <div class="records" id="win-records"></div>
           <button class="btn primary" id="btn-win-new" type="button">New Game</button>
           <button class="btn" id="btn-win-close" type="button">Close</button>
         </div>
@@ -114,13 +131,22 @@ export class App {
     this.optionBar = this.root.querySelector<HTMLElement>('#options')!;
     this.undoBtn = this.root.querySelector<HTMLButtonElement>('#btn-undo')!;
     this.autoBtn = this.root.querySelector<HTMLButtonElement>('#btn-auto')!;
+    this.muteBtn = this.root.querySelector<HTMLButtonElement>('#btn-mute')!;
     this.stats = {
       time: this.root.querySelector<HTMLElement>('#stat-time')!,
       moves: this.root.querySelector<HTMLElement>('#stat-moves')!,
       score: this.root.querySelector<HTMLElement>('#stat-score')!,
       scoreBox: this.root.querySelector<HTMLElement>('#stat-score-box')!,
+      best: this.root.querySelector<HTMLElement>('#stat-best')!,
     };
 
+    this.paintMuteButton();
+    this.muteBtn.addEventListener('click', () => {
+      this.sound.setMuted(!this.sound.muted);
+      this.paintMuteButton();
+      // Confirm audibly that sound is back on.
+      if (!this.sound.muted) this.sound.play('flip');
+    });
     this.undoBtn.addEventListener('click', () => this.undo());
     this.autoBtn.addEventListener('click', () => this.autoplay());
     this.root.querySelector('#btn-restart')!.addEventListener('click', () => this.restart());
@@ -209,24 +235,116 @@ export class App {
     this.stopAutoplay();
     const prev = this.current.history.pop();
     if (!prev) return;
+    const positions = this.captureRects();
     this.current.state = prev;
     this.hideOverlay();
     this.render();
+    this.glideFrom(positions);
+    this.sound.play('undo');
   }
 
   // ---------------------------------------------------------------- moves
 
-  tryMove(move: Move): boolean {
+  /**
+   * `before` lets a caller supply card positions captured earlier — the drop
+   * point of a drag, say — so the glide starts from where the player let go.
+   */
+  tryMove(move: Move, before?: Map<string, DOMRect>): boolean {
     const { game, state } = this.current;
-    if (state.won || !game.canMove(state, move)) return false;
+    if (state.won || !game.canMove(state, move)) {
+      this.sound.play('invalid');
+      return false;
+    }
+    const positions = before ?? this.captureRects();
     this.current.history.push(state);
     this.current.state = game.apply(state, move);
     this.startTimer();
     this.lastMoveAt = performance.now();
     this.lastMoveFrom = move.type === 'move' ? move.from : null;
     this.render();
+    this.glideFrom(positions);
+    this.playMoveSound(move, state, this.current.state);
     if (this.current.state.won) this.onWin();
     return true;
+  }
+
+  /** Picks the sound that matches what the move actually did. */
+  private playMoveSound(move: Move, before: GameState, after: GameState): void {
+    if (after.won) {
+      this.sound.play('win');
+      return;
+    }
+    const onFoundation = (s: GameState) =>
+      s.piles.reduce((n, p) => (p.kind === 'foundation' ? n + p.cards.length : n), 0);
+    if (onFoundation(after) > onFoundation(before)) {
+      // Spider clears thirteen at once when a suit completes.
+      this.sound.play(onFoundation(after) - onFoundation(before) >= 13 ? 'sweep' : 'foundation');
+      return;
+    }
+    if (move.type === 'stock') {
+      this.sound.play('deal');
+      return;
+    }
+    const flipped = (s: GameState) => s.piles.reduce((n, p) => n + p.cards.filter((c) => c.faceUp).length, 0);
+    this.sound.play(flipped(after) > flipped(before) ? 'flip' : 'move');
+  }
+
+  /** Screen positions of every card currently drawn, including a drag layer. */
+  private captureRects(): Map<string, DOMRect> {
+    const map = new Map<string, DOMRect>();
+    for (const el of this.board.querySelectorAll<HTMLElement>('.card[data-card]')) {
+      // A dragged card appears twice; the layer clone comes last and wins,
+      // which is what we want — that is where the player sees it.
+      map.set(el.dataset.card!, el.getBoundingClientRect());
+    }
+    return map;
+  }
+
+  /**
+   * FLIP animation: the board has already been redrawn in its new arrangement,
+   * so each card that moved is offset back to where it was and then released,
+   * which reads as the card sliding into place.
+   */
+  private glideFrom(before: Map<string, DOMRect>): void {
+    if (prefersReducedMotion()) return;
+    const moving: { el: HTMLElement; base: string; dx: number; dy: number }[] = [];
+
+    for (const el of this.board.querySelectorAll<HTMLElement>('.card[data-card]')) {
+      const previous = before.get(el.dataset.card!);
+      if (!previous) continue;
+      const now = el.getBoundingClientRect();
+      const dx = previous.left - now.left;
+      const dy = previous.top - now.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      moving.push({ el, base: el.style.transform, dx, dy });
+    }
+    if (moving.length === 0) return;
+
+    for (const { el, base, dx, dy } of moving) {
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px, ${dy}px) ${base}`;
+      el.style.zIndex = String(400 + Number(el.style.zIndex || 0));
+      el.classList.add('gliding');
+    }
+
+    // Read once to flush the starting offsets before switching the transition on.
+    void this.board.offsetHeight;
+
+    for (const { el, base } of moving) {
+      this.inFlight += 1;
+      el.style.transition = `transform ${GLIDE_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
+      el.style.transform = base;
+      const settle = () => {
+        el.style.transition = '';
+        el.classList.remove('gliding');
+        this.inFlight = Math.max(0, this.inFlight - 1);
+      };
+      el.addEventListener('transitionend', settle, { once: true });
+      // A card already at its destination fires no transitionend; don't leak a count.
+      window.setTimeout(() => {
+        if (el.classList.contains('gliding')) settle();
+      }, GLIDE_MS + 80);
+    }
   }
 
   autoplay(): void {
@@ -239,7 +357,7 @@ export class App {
         this.autoplaying = false;
         return;
       }
-      window.setTimeout(step, 90);
+      window.setTimeout(step, GLIDE_MS - 30);
     };
     step();
   }
@@ -331,8 +449,20 @@ export class App {
     if (!drag || e.pointerId !== drag.pointerId) return;
     const { game, state } = this.current;
     const target = drag.moved ? this.bestDropTarget() : game.autoTarget(state, drag.from, drag.count);
-    this.cancelDrag();
-    if (target) this.tryMove({ type: 'move', from: drag.from, to: target, count: drag.count });
+
+    // Capture while the carried cards are still under the pointer, so they
+    // glide from there — whether they land on a new pile or fall back.
+    const positions = this.captureRects();
+    drag.layer.remove();
+    this.drag = null;
+
+    if (target) {
+      this.tryMove({ type: 'move', from: drag.from, to: target, count: drag.count }, positions);
+    } else {
+      this.render();
+      this.glideFrom(positions);
+      if (drag.moved) this.sound.play('invalid');
+    }
   }
 
   private positionDrag(clientX: number, clientY: number): void {
@@ -434,6 +564,15 @@ export class App {
     this.stats.time.textContent = formatTime(this.elapsed());
     this.stats.moves.textContent = String(state.moves);
     this.stats.score.textContent = String(state.score);
+    const best = getRecord(this.recordKey()).bestTimeMs;
+    this.stats.best.textContent = best === null ? '—' : formatTime(best);
+  }
+
+  private paintMuteButton(): void {
+    const muted = this.sound.muted;
+    this.muteBtn.textContent = muted ? '🔇' : '🔊';
+    this.muteBtn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound');
+    this.muteBtn.classList.toggle('muted', muted);
   }
 
   private startTimer(): void {
@@ -456,10 +595,48 @@ export class App {
     this.stopAutoplay();
     this.stopTimer();
     const { state, game } = this.current;
-    const parts = [`Time ${formatTime(this.elapsed())}`, `${state.moves} moves`];
+    const timeMs = this.elapsed();
+    const improvements = submitWin(this.recordKey(), {
+      timeMs,
+      score: state.score,
+      moves: state.moves,
+    });
+
+    const parts = [`Time ${formatTime(timeMs)}`, `${state.moves} moves`];
     if (game.hasScore) parts.push(`score ${state.score}`);
     this.root.querySelector<HTMLElement>('#win-summary')!.textContent = `${game.name} — ${parts.join(' · ')}`;
+    this.root.querySelector<HTMLElement>('#win-records')!.replaceChildren(
+      ...this.recordLines(improvements),
+    );
     this.overlay.classList.remove('hidden');
+    this.updateStats();
+  }
+
+  private recordKey(): string {
+    return variantKey(this.current.game.id, this.current.options);
+  }
+
+  /** Personal-best lines for the win dialog, flagging anything just beaten. */
+  private recordLines(improvements: Improvements): HTMLElement[] {
+    const record = getRecord(this.recordKey());
+    const rows: [string, string, boolean][] = [
+      ['Best time', record.bestTimeMs === null ? '—' : formatTime(record.bestTimeMs), improvements.time],
+      ['Fewest moves', record.fewestMoves === null ? '—' : String(record.fewestMoves), improvements.moves],
+    ];
+    if (this.current.game.hasScore) {
+      rows.push(['Best score', record.bestScore === null ? '—' : String(record.bestScore), improvements.score]);
+    }
+    rows.push(['Games won', String(record.wins), false]);
+
+    return rows.map(([label, value, isNew]) => {
+      const row = document.createElement('div');
+      row.className = 'record-row';
+      row.innerHTML =
+        `<span class="record-label">${label}</span>` +
+        `<span class="record-value">${value}</span>` +
+        (isNew ? `<span class="record-badge">New!</span>` : '');
+      return row;
+    });
   }
 
   private hideOverlay(): void {
@@ -492,6 +669,15 @@ export class App {
       undo: () => this.undo(),
       autoplay: () => this.autoplay(),
       elapsed: () => this.elapsed(),
+      /** True while cards are still gliding — tests wait on this. */
+      animating: () => this.inFlight > 0,
+      muted: () => this.sound.muted,
+      setMuted: (muted: boolean) => {
+        this.sound.setMuted(muted);
+        this.paintMuteButton();
+      },
+      record: () => getRecord(this.recordKey()),
+      recordKey: () => this.recordKey(),
       /** Screen position of a card's centre, for synthetic drags. */
       cardPoint: (cardId: string) => {
         const el = this.board.querySelector<HTMLElement>(`.card[data-card="${cardId}"]`);
@@ -520,11 +706,8 @@ function overlapArea(a: DOMRect, b: DOMRect): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-function formatTime(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
 function randomSeed(): number {
