@@ -261,28 +261,31 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: calc(var(--card-w) * 0.14);
-  line-height: 0.9;
+  font-size: calc(var(--card-w) * 0.2);
+  /* Tight enough that the rank-and-suit block still fits the sliver a deeply
+     fanned pile leaves visible, without shrinking either glyph. */
+  line-height: 0.74;
   /* Always above the court art, which otherwise covers the index. */
   z-index: 1;
 }
 
-/*
- * Sized so the whole rank-over-suit block fits inside the tightest fan sliver
- * (the compression floor in render.ts); otherwise the suit is clipped in deep
- * piles and hearts become indistinguishable from diamonds.
- */
 .card .corner b {
-  font-size: calc(var(--card-w) * 0.11);
+  font-size: calc(var(--card-w) * 0.14);
+}
+
+/* "10" is the only two-character rank; trimmed so its index stays as narrow
+   as the others and keeps clear of the pip field. */
+.card[data-rank='10'] .corner {
+  font-size: calc(var(--card-w) * 0.17);
 }
 
 .card .corner.tl {
-  top: 4%;
+  top: 2.5%;
   left: 6%;
 }
 
 .card .corner.br {
-  bottom: 4%;
+  bottom: 2.5%;
   right: 6%;
   transform: rotate(180deg);
 }

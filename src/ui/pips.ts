@@ -12,20 +12,20 @@ import type { Rank, Suit } from '../engine/types';
  * the index reads as the rank, the field reads as the count, and the two never
  * run together.
  */
-const LEFT = 42;
+const LEFT = 40;
 const CENTRE = 60;
-const RIGHT = 78;
+const RIGHT = 80;
 
 /**
  * The columns already clear the indices horizontally, so the field can run the
  * full height of the card the way a real one does.
  */
-const TOP = 42;
-const BOTTOM = 126;
+const TOP = 34;
+const BOTTOM = 134;
 const MIDLINE = (TOP + BOTTOM) / 2;
 
-const PIP_SIZE = 20;
-const ACE_SIZE = 46;
+const PIP_SIZE = 24;
+const ACE_SIZE = 52;
 
 /** [column, fraction down the pip field] */
 type Spot = [number, number];
