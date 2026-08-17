@@ -253,22 +253,27 @@ body {
 }
 
 /*
- * Rank and suit sit side by side rather than stacked: in a compressed pile only
- * the top sliver of a card shows, and a stacked suit glyph would be clipped out.
+ * Rank above suit, as on a real card. Kept narrow and tight so the index reads
+ * as one unit and never runs into the pip field beside it.
  */
 .card .corner {
   position: absolute;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: calc(var(--card-w) * 0.03);
-  font-size: calc(var(--card-w) * 0.22);
-  line-height: 1;
+  font-size: calc(var(--card-w) * 0.14);
+  line-height: 0.9;
   /* Always above the court art, which otherwise covers the index. */
   z-index: 1;
 }
 
+/*
+ * Sized so the whole rank-over-suit block fits inside the tightest fan sliver
+ * (the compression floor in render.ts); otherwise the suit is clipped in deep
+ * piles and hearts become indistinguishable from diamonds.
+ */
 .card .corner b {
-  font-size: calc(var(--card-w) * 0.19);
+  font-size: calc(var(--card-w) * 0.11);
 }
 
 .card .corner.tl {

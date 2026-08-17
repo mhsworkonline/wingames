@@ -7,17 +7,25 @@ import type { Rank, Suit } from '../engine/types';
  * midline rotated 180° exactly as on a real card.
  */
 
-const LEFT = 38;
+/**
+ * The pip field is inset from the card edges so it clears the corner indices —
+ * the index reads as the rank, the field reads as the count, and the two never
+ * run together.
+ */
+const LEFT = 42;
 const CENTRE = 60;
-const RIGHT = 82;
+const RIGHT = 78;
 
-/** Vertical span the pips occupy; the midline sits halfway between. */
-const TOP = 38;
-const BOTTOM = 130;
+/**
+ * The columns already clear the indices horizontally, so the field can run the
+ * full height of the card the way a real one does.
+ */
+const TOP = 42;
+const BOTTOM = 126;
 const MIDLINE = (TOP + BOTTOM) / 2;
 
-const PIP_SIZE = 27;
-const ACE_SIZE = 54;
+const PIP_SIZE = 20;
+const ACE_SIZE = 46;
 
 /** [column, fraction down the pip field] */
 type Spot = [number, number];
