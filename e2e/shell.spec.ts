@@ -117,6 +117,38 @@ test.describe('application shell', () => {
     await expect(page.locator('.pile[data-kind="tableau"] .card')).toHaveCount(28);
   });
 
+  test('retains every game in progress across a page reload', async ({ page }) => {
+    await openGame(page, 'klondike', 4242);
+    await clickStock(page);
+    const klondikeBefore = await readState(page);
+    expect(klondikeBefore.moves).toBe(1);
+
+    await page.getByRole('button', { name: 'Spider', exact: true }).click();
+    await clickStock(page);
+    const spiderBefore = await readState(page);
+    expect(spiderBefore.moves).toBe(1);
+
+    // Reload lands back on Spider — the tab active at the time — with both
+    // games' progress intact, not a fresh deal.
+    await page.reload();
+    await page.waitForFunction(() => Boolean(window.wingames));
+    await expect(page.locator('.tab.active')).toHaveText('Spider');
+    const spiderAfter = await readState(page);
+    expect(spiderAfter.seed).toBe(spiderBefore.seed);
+    expect(spiderAfter.moves).toBe(1);
+    expect(spiderAfter.piles.map((p) => p.cards.map((c) => c.id))).toEqual(
+      spiderBefore.piles.map((p) => p.cards.map((c) => c.id)),
+    );
+
+    await page.getByRole('button', { name: 'Klondike', exact: true }).click();
+    const klondikeAfter = await readState(page);
+    expect(klondikeAfter.seed).toBe(klondikeBefore.seed);
+    expect(klondikeAfter.moves).toBe(1);
+    expect(klondikeAfter.piles.map((p) => p.cards.map((c) => c.id))).toEqual(
+      klondikeBefore.piles.map((p) => p.cards.map((c) => c.id)),
+    );
+  });
+
   test('Restart Deal replays the same cards', async ({ page }) => {
     await openGame(page, 'klondike', 8080);
     const before = await readState(page);

@@ -15,7 +15,7 @@ const GOLD_DARK = '#b5832a';
 const SKIN = '#f7e3cd';
 const HAIR = '#3a4667';
 const SILVER = '#b9c4d6';
-const LINEN = '#f2f4f8';
+const LINEN = '#f6f3ea';
 
 /** Mirror axis: the figure is drawn in the top half and rotated about this point. */
 const CENTRE_X = 60;
@@ -34,9 +34,10 @@ export function courtArt(rank: Rank, suit: Suit): string {
 
   return (
     `<svg class="court" viewBox="0 0 120 168" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
-    // Tinted panel behind the figure, borderless so the corner index — which
-    // paints above it — stays clean and unobstructed.
+    // Tinted panel behind the figure, with a fine double-rule border like an
+    // engraved card frame. Left inset of the corner index, which paints above it.
     `<rect x="16" y="12" width="88" height="144" rx="6" fill="${LINEN}"/>` +
+    `<rect x="19" y="15" width="82" height="138" rx="4" fill="none" stroke="${trim}" stroke-width="0.8" opacity="0.55"/>` +
     `<g stroke-linejoin="round" stroke-linecap="round">${half}</g>` +
     `<g stroke-linejoin="round" stroke-linecap="round" transform="rotate(180 ${CENTRE_X} ${CENTRE_Y})">${half}</g>` +
     `</svg>`
@@ -47,6 +48,9 @@ export function courtArt(rank: Rank, suit: Suit): string {
 function robeBlock(robe: string, trim: string, pip: string): string {
   return (
     `<path d="M22 84 L22 70 Q60 50 98 70 L98 84 Z" fill="${robe}" stroke="${INK}" stroke-width="1.4"/>` +
+    // A soft sheen along the shoulder line, so the robe reads as fabric
+    // rather than a flat colour fill.
+    `<path d="M24 76 Q60 58 96 76 L96 80 Q60 63 24 80 Z" fill="#ffffff" opacity="0.14"/>` +
     // Ermine placket down the front.
     `<path d="M46 60 Q60 80 74 60 L74 84 L46 84 Z" fill="${LINEN}" stroke="${INK}" stroke-width="1.2"/>` +
     `<path d="M51 66 Q60 76 69 66" fill="none" stroke="${trim}" stroke-width="1.6"/>` +
@@ -70,9 +74,10 @@ function king(robe: string, trim: string, pip: string): string {
     `<path d="M75 38 Q78 56 72 60 Q76 44 73 36 Z" fill="${HAIR}"/>` +
     // Head.
     `<ellipse cx="60" cy="44" rx="13" ry="14" fill="${SKIN}" stroke="${INK}" stroke-width="1.3"/>` +
-    `<circle cx="55" cy="42" r="1.7" fill="${INK}"/>` +
-    `<circle cx="65" cy="42" r="1.7" fill="${INK}"/>` +
-    `<path d="M56 49 Q60 52 64 49" fill="none" stroke="${INK}" stroke-width="1.2"/>` +
+    // Almond eyes, drawn as a single stroke rather than a cartoon pupil.
+    `<path d="M52.5 41.5 Q55 39.8 57.5 41.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M62.5 41.5 Q65 39.8 67.5 41.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M56 49.5 L64 49.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
     // The king's beard.
     `<path d="M47 46 Q49 64 60 66 Q71 64 73 46 Q60 58 47 46 Z" fill="${LINEN}" stroke="${INK}" stroke-width="1.2"/>` +
     // Crown.
@@ -97,9 +102,9 @@ function queen(robe: string, trim: string, pip: string): string {
     `<circle cx="92" cy="38" r="3.4" fill="${GOLD}" stroke="${INK}" stroke-width="0.9"/>` +
     // Head.
     `<ellipse cx="60" cy="45" rx="12.5" ry="14" fill="${SKIN}" stroke="${INK}" stroke-width="1.3"/>` +
-    `<circle cx="55.5" cy="43" r="1.7" fill="${INK}"/>` +
-    `<circle cx="64.5" cy="43" r="1.7" fill="${INK}"/>` +
-    `<path d="M56 51 Q60 54 64 51" fill="none" stroke="${INK}" stroke-width="1.2"/>` +
+    `<path d="M53 42.5 Q55.5 40.8 58 42.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M62 42.5 Q64.5 40.8 67 42.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M56.5 50.5 L63.5 50.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
     `<path d="M47 38 Q60 28 73 38 Q60 34 47 38 Z" fill="${HAIR}"/>` +
     // Pearl necklace.
     `<path d="M52 62 Q60 70 68 62" fill="none" stroke="${GOLD}" stroke-width="1.6"/>` +
@@ -123,9 +128,9 @@ function jack(robe: string, trim: string, pip: string): string {
     `<path d="M74 40 Q77 54 71 60 Q74 48 72 38 Z" fill="${HAIR}"/>` +
     // Head — the knave is beardless.
     `<ellipse cx="60" cy="46" rx="12.5" ry="13.5" fill="${SKIN}" stroke="${INK}" stroke-width="1.3"/>` +
-    `<circle cx="55.5" cy="44" r="1.7" fill="${INK}"/>` +
-    `<circle cx="64.5" cy="44" r="1.7" fill="${INK}"/>` +
-    `<path d="M56 52 Q60 55 64 52" fill="none" stroke="${INK}" stroke-width="1.2"/>` +
+    `<path d="M53 43.5 Q55.5 41.8 58 43.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M62 43.5 Q64.5 41.8 67 43.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M56.5 51.5 L63.5 51.5" fill="none" stroke="${INK}" stroke-width="1"/>` +
     // Soft cap with a feather sweeping off to the side.
     `<path d="M46 24 Q30 14 24 22 Q38 22 44 34 Z" fill="${LINEN}" stroke="${INK}" stroke-width="1.1"/>` +
     `<path d="M45 36 Q46 22 60 21 Q74 22 75 36 Q60 30 45 36 Z" fill="${robe}" stroke="${INK}" stroke-width="1.3"/>` +

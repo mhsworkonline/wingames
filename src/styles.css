@@ -6,7 +6,7 @@
   --text: #eaf3ee;
   --muted: #9fbdae;
   --accent: #f0b429;
-  --card-radius: 7px;
+  --card-font: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
   color-scheme: dark;
 }
 
@@ -112,6 +112,22 @@ body {
   padding: 6px 16px;
   background: var(--bar-2);
   border-bottom: 1px solid #0006;
+  overflow: hidden;
+  max-height: 64px;
+  transition: max-height 200ms ease, padding 200ms ease, border-color 200ms ease;
+}
+
+.toolbar.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+}
+
+#btn-toolbar-toggle {
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .options {
@@ -215,7 +231,7 @@ body {
   width: var(--card-w);
   height: var(--card-h);
   border: 2px dashed #ffffff33;
-  border-radius: var(--card-radius);
+  border-radius: calc(var(--card-w) * 0.055);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -238,11 +254,12 @@ body {
   left: 0;
   width: var(--card-w);
   height: var(--card-h);
-  border-radius: var(--card-radius);
-  background: #fdfdfa;
+  border-radius: calc(var(--card-w) * 0.055);
+  background: #faf8f2;
   border: 1px solid #00000033;
   box-shadow: 0 1px 2px #00000059;
-  color: #111;
+  color: #131313;
+  font-family: var(--card-font);
   font-weight: 700;
   line-height: 1;
   touch-action: none;
@@ -250,13 +267,44 @@ body {
 }
 
 .card.red {
-  color: #c02626;
+  color: #b3121f;
+}
+
+/* Hairline inset frame, the way a printed card carries its own border. */
+.card:not(.back)::before {
+  content: '';
+  position: absolute;
+  inset: 4.5%;
+  border: 1px solid #00000020;
+  border-radius: calc(var(--card-w) * 0.032);
+  pointer-events: none;
 }
 
 .card.back {
   background:
-    repeating-linear-gradient(45deg, #1e4f8f 0 6px, #1a4680 6px 12px);
-  border: 2px solid #f2f2f2;
+    repeating-linear-gradient(45deg, transparent 0 7px, #24437e 7px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 7px, #24437e 7px 8px),
+    #14294e;
+  border: none;
+  box-shadow:
+    0 1px 2px #00000059,
+    inset 0 0 0 3px #eef1f6,
+    inset 0 0 0 7px #c9a24a,
+    inset 0 0 0 8px #14294e;
+}
+
+/* Central emblem on the card back, drawn as a clipped gradient diamond so it
+   needs no extra markup and stays crisp at any card size. */
+.card.back::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 32%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #ecd08a, #b3872f);
+  clip-path: polygon(50% 3%, 97% 50%, 50% 97%, 3% 50%);
+  box-shadow: 0 0 0 1px #14294e inset;
 }
 
 /*
@@ -426,7 +474,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card {
+  .card,
+  .toolbar {
     transition: none !important;
   }
 }

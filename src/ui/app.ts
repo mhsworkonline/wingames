@@ -1,6 +1,15 @@
 import { defaultOptions, getGame, GAMES } from '../engine';
 import { findPile } from '../engine/cards';
 import type { Card, Game, GameId, GameState, Move } from '../engine/types';
+import {
+  loadActiveGame,
+  loadSession,
+  loadToolbarCollapsed,
+  saveActiveGame,
+  saveSession,
+  saveToolbarCollapsed,
+  type StoredSession,
+} from './persistence';
 import { formatTime, getRecord, submitWin, variantKey, type Improvements } from './records';
 import { boardColumns, cardElement, computeMetrics, type Metrics, renderBoard } from './render';
 import { Sound } from './sound';
@@ -51,6 +60,8 @@ export class App {
     best: HTMLElement;
   };
   private optionBar!: HTMLElement;
+  private toolbar!: HTMLElement;
+  private toolbarToggleBtn!: HTMLButtonElement;
   private tabs = new Map<GameId, HTMLButtonElement>();
   private undoBtn!: HTMLButtonElement;
   private autoBtn!: HTMLButtonElement;
@@ -66,14 +77,23 @@ export class App {
   private sound = new Sound();
   /** Cards still gliding; the test hooks wait on this reaching zero. */
   private inFlight = 0;
+  /** Counts 250ms ticks so the running timer gets persisted periodically without hammering storage. */
+  private tickCount = 0;
+  private toolbarCollapsed = false;
 
   constructor(root: HTMLElement) {
     this.root = root;
     this.buildChrome();
-    this.select('klondike');
+    this.select(loadActiveGame() ?? 'klondike');
     window.addEventListener('resize', () => this.layout());
-    window.setInterval(() => this.updateStats(), 250);
+    window.setInterval(() => this.onTick(), 250);
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    // Reload, tab close, and switching away should never lose an in-progress
+    // game — 'pagehide' catches cases 'beforeunload' can miss (e.g. bfcache).
+    window.addEventListener('pagehide', () => this.persistAll());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.persistAll();
+    });
   }
 
   // ---------------------------------------------------------------- chrome
@@ -89,8 +109,9 @@ export class App {
           <div class="stat" id="stat-score-box"><span class="label">Score</span><span class="value" id="stat-score">0</span></div>
           <div class="stat"><span class="label">Best</span><span class="value" id="stat-best">—</span></div>
         </div>
+        <button class="btn icon" id="btn-toolbar-toggle" type="button"></button>
       </header>
-      <div class="toolbar">
+      <div class="toolbar" id="toolbar">
         <div class="options" id="options"></div>
         <div class="actions">
           <button class="btn icon" id="btn-mute" type="button" title="Sound on/off"></button>
@@ -129,6 +150,8 @@ export class App {
     this.boardWrap = this.root.querySelector<HTMLElement>('#board-wrap')!;
     this.overlay = this.root.querySelector<HTMLElement>('#overlay')!;
     this.optionBar = this.root.querySelector<HTMLElement>('#options')!;
+    this.toolbar = this.root.querySelector<HTMLElement>('#toolbar')!;
+    this.toolbarToggleBtn = this.root.querySelector<HTMLButtonElement>('#btn-toolbar-toggle')!;
     this.undoBtn = this.root.querySelector<HTMLButtonElement>('#btn-undo')!;
     this.autoBtn = this.root.querySelector<HTMLButtonElement>('#btn-auto')!;
     this.muteBtn = this.root.querySelector<HTMLButtonElement>('#btn-mute')!;
@@ -147,6 +170,14 @@ export class App {
       // Confirm audibly that sound is back on.
       if (!this.sound.muted) this.sound.play('flip');
     });
+    this.setToolbarCollapsed(loadToolbarCollapsed());
+    this.toolbarToggleBtn.addEventListener('click', () => this.setToolbarCollapsed(!this.toolbarCollapsed));
+    // The collapse animates via CSS max-height; re-measure once it settles so
+    // cards grow (or shrink) to fill exactly the space the toolbar freed up.
+    this.toolbar.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'max-height') this.layout();
+    });
+
     this.undoBtn.addEventListener('click', () => this.undo());
     this.autoBtn.addEventListener('click', () => this.autoplay());
     this.root.querySelector('#btn-restart')!.addEventListener('click', () => this.restart());
@@ -204,12 +235,14 @@ export class App {
 
   select(id: GameId): void {
     this.stopAutoplay();
+    if (this.current) this.persist(this.current.game.id);
     const existing = this.sessions.get(id);
     if (existing) {
       this.current = existing;
     } else {
       const game = getGame(id);
-      this.current = this.freshSession(game, randomSeed(), defaultOptions(game));
+      const stored = loadSession(id);
+      this.current = stored ? this.restoredSession(game, stored) : this.freshSession(game, randomSeed(), defaultOptions(game));
       this.sessions.set(id, this.current);
     }
     for (const [gameId, btn] of this.tabs) btn.classList.toggle('active', gameId === id);
@@ -217,6 +250,7 @@ export class App {
     this.buildOptionBar();
     this.hideOverlay();
     this.layout();
+    saveActiveGame(id);
   }
 
   private freshSession(game: Game, seed: number, options: Record<string, number>): Session {
@@ -231,6 +265,21 @@ export class App {
     };
   }
 
+  /** Rebuilds a session from what was saved before the last reload. */
+  private restoredSession(game: Game, stored: StoredSession): Session {
+    return {
+      game,
+      state: stored.state,
+      history: stored.history,
+      seed: stored.seed,
+      options: stored.options,
+      elapsedMs: stored.elapsedMs,
+      // A fresh performance.now() reference; we can't know how long the page
+      // was closed, so the clock simply resumes from where it was saved.
+      runningSince: stored.running ? performance.now() : null,
+    };
+  }
+
   newGame(seed = randomSeed()): void {
     this.stopAutoplay();
     const { game, options } = this.current;
@@ -239,6 +288,7 @@ export class App {
     this.hideOverlay();
     // layout() re-measures, which matters when a level changes the column count.
     this.layout();
+    this.persist(game.id);
   }
 
   restart(): void {
@@ -255,6 +305,37 @@ export class App {
     this.render();
     this.glideFrom(positions);
     this.sound.play('undo');
+    this.persist();
+  }
+
+  // ---------------------------------------------------------------- persistence
+
+  /** Saves one session (the current one by default) so a reload can restore it. */
+  private persist(id: GameId = this.current.game.id): void {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    const running = session.runningSince !== null;
+    const elapsedMs = session.elapsedMs + (running ? performance.now() - session.runningSince! : 0);
+    saveSession(id, {
+      seed: session.seed,
+      options: session.options,
+      state: session.state,
+      history: session.history,
+      elapsedMs,
+      running,
+    });
+  }
+
+  private persistAll(): void {
+    for (const id of this.sessions.keys()) this.persist(id);
+  }
+
+  private onTick(): void {
+    this.updateStats();
+    // Every ~5s, so a hard crash or power loss loses at most a few seconds of
+    // timer progress rather than requiring a clean tab close to be saved.
+    this.tickCount += 1;
+    if (this.tickCount % 20 === 0) this.persist();
   }
 
   // ---------------------------------------------------------------- moves
@@ -279,6 +360,7 @@ export class App {
     this.glideFrom(positions);
     this.playMoveSound(move, state, this.current.state);
     if (this.current.state.won) this.onWin();
+    this.persist();
     return true;
   }
 
@@ -588,6 +670,26 @@ export class App {
     this.muteBtn.textContent = muted ? '🔇' : '🔊';
     this.muteBtn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound');
     this.muteBtn.classList.toggle('muted', muted);
+  }
+
+  /**
+   * Hides the difficulty/actions toolbar so the board can claim that space,
+   * without giving up the tabs or stats — those stay visible either way.
+   */
+  private setToolbarCollapsed(collapsed: boolean): void {
+    this.toolbarCollapsed = collapsed;
+    this.toolbar.classList.toggle('collapsed', collapsed);
+    this.toolbarToggleBtn.textContent = collapsed ? '▾' : '▴';
+    this.toolbarToggleBtn.setAttribute(
+      'aria-label',
+      collapsed ? 'Show difficulty and game actions' : 'Hide difficulty and game actions',
+    );
+    this.toolbarToggleBtn.title = this.toolbarToggleBtn.getAttribute('aria-label')!;
+    saveToolbarCollapsed(collapsed);
+    // Immediate re-measure covers the reduced-motion case (no transitionend
+    // ever fires); the listener in buildChrome() re-measures again once the
+    // animated collapse actually finishes, for an exact fit.
+    if (this.metrics) this.layout();
   }
 
   private startTimer(): void {
